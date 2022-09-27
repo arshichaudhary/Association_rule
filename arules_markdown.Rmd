@@ -1,0 +1,131 @@
+---
+title: "Association Rules Mining"
+author: "Arshdeep Kaur"
+date: '2022-08-04'
+output: html_document
+---
+#GOAL OF THE ANALYSIS: DETERMINE WHAT TYPES OF MUSIC PEOPLE TEND TO LISTEN TO TOGETHER BASED ON TAGS USED IN THEIR LISTENING RECORDS
+
+#STEP 1: INSTALL & LOAD REQUIRED PACKAGES
+
+
+```{r}
+install.packages("arules")
+install.packages("RColorBrewer")
+```
+
+```{r}
+library(arules)
+library(RColorBrewer)
+```
+
+#STEP 2: IMPORT AND PROCESS THE DATA
+#=====================================
+
+##2.1 Import the Data
+--------------------------
+
+```{r}
+user_music <- read.csv("user_music_data.csv", header=TRUE, sep=",")
+tags <- read.csv("tags.dat", header = TRUE, sep="\t")
+
+head(user_music)
+head(tags)
+```
+
+##2.2. Process the Data
+###2.2.1. merge the data
+```{r}
+merged_df <-merge(user_music,tags, by.x="tagID")
+head(merged_df)
+```
+
+###2.2.2 Select columns for analysis (ie., UserID and tagValue)
+```{r}
+final_df <- subset(merged_df, select=c("userID","tagValue"))
+head(final_df)
+write.csv(final_df,"final_df.csv")
+```
+
+###coerce data into transactional format (i.e., using keyword "as" ... transaction)
+```{r}
+tr_dat <- read.transactions("final_df.csv", format="single", header=TRUE, sep=",", cols=c("userID", "tagValue"))
+
+inspect(head(tr_dat))
+
+```
+###get summary of transactional data
+```{r}
+tr_dat
+```
+
+###What are the top 10 most frequently used tags?
+```{r}
+itemFrequencyPlot(tr_dat,topN=10,type="absolute", col=brewer.pal(8,"Accent"), main="Top 10 Most Popular Music Tags from Users", cex.names=0.8)
+```
+#STEP 3: IMPLEMENT ASSOCIATION RULES MINING
+#===============================================
+
+##USE THE apriori algorithm from the arules package
+
+##3.1 general rules
+```{r}
+assoc_rules <- apriori(tr_dat, parameter =list(supp=0.05,conf=0.8) )
+```
+
+```{r}
+##sort rules by lift
+assoc_rules <-sort(assoc_rules,by="lift",decreasing = TRUE)
+
+##show top 10 rules
+inspect(assoc_rules[1:10])
+```
+Based on our analysis, we inspect the top 10 rules. We observe that users who listen to types of music indicated of the left-hand-side(lhs) [antecedent] tend afterwards to listen to indie music (rhs)[consequent].We could recommend indi music to individuals who might have similar listening patterns.
+
+Referring to confidence, it shows the level of confidence we have in the rule. For instance, looking at rule #1, we are 95% confident that people who listen to {british, indie rock, rock} music together are more likely to listen to indie music as well. In fact based on lift value, people who listen to {british, indie rock, rock} together are about 4 times more likely to listen to indie music as well. In other words, the odds of people who listen to {british, indie rock, rock} music together to also listen indie music in general is 4.
+
+Count shows the number of transactions in the data that support each rule. Rule 1 has 97 transactions that support it, which is aboit 5.1% of the transactions (i.e. support = 0.0513).
+
+##3.2 Rules that Target Specific Items
+
+###Example: Targeting lhs - what types of music do people tend to listen after they listen to rock?
+###         Targeting rhs: -What type of music did people listen to before they listened to electronic music?
+
+
+###3.2.1a: Targeting the lhs
+```{r}
+rock_rules <-apriori(tr_dat,parameter = list(supp=0.05,conf=0.5), appearance =list(lhs="rock", default="rhs"))
+rock_rules <- sort(rock_rules,by="lift",decreasing=TRUE)
+inspect(rock_rules)
+```
+We see from the above that people who listen to rocf music tend to listen to alternative ans pop music thereafter.So, we could recommend alternative and pop music to people who often listen to rok music.
+
+###3.2.1b: Targeting the lhs (i.e., mining the types of music which are associated with rock music as the antecedent)
+```{r}
+rock_rules <-apriori(tr_dat,parameter = list(supp=0.001,conf=0.5), appearance =list(lhs="rock", default="rhs"))
+rock_rules <- sort(rock_rules,by="lift",decreasing=TRUE)
+inspect(rock_rules)
+```
+We see even after reducing the support to 0.001, we still discover only 2 rules.
+
+###3.2.2a: Targeting the rhs
+###Targeting rhs: -What type of music did people listen to before they listened to electronic music?
+
+```{r}
+elec_rules <- apriori(tr_dat,parameter = list(supp=0.05,conf=0.75), appearance =list(default="lhs", rhs="electronic"))
+elec_rules <- sort(elec_rules,by="lift",decreasing=TRUE)
+inspect(elec_rules[1:10])
+```
+The lhs shows the different types of music people listened to before they listened to electronic music. The most popular types of music people listened to before they listened to electronic music are:indie,dance, and alternative music. Generally, we could recommend all the types of music shown on the lhs to people who listen to electronic music because there is a strong association between those music genres and electronic music.
+
+
+
+
+
+
+
+
+
+
+
+
